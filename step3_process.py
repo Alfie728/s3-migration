@@ -13,7 +13,8 @@ DEMO_FIELDS = ['dateOfBirth', 'currentAddress', 'birthCity']
 
 def sanitize_path(path):
     """Remove emails from paths (replace with empty string)"""
-    email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+    # Require email local part to start with a letter to avoid matching dates like 07_18_2025_20_31-
+    email_pattern = r'[a-zA-Z][a-zA-Z0-9._%+-]*@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
     return re.sub(email_pattern, '', path)
 
 

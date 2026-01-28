@@ -39,21 +39,25 @@ def copy_single_object(s3_client, source_key, dry_run):
         return False, False
 
 
-def step1_copy_to_sanitized(dry_run=False, prefix=''):
+def step1_copy_to_sanitized(dry_run=False, prefixes=None):
     """Copy all objects from source to sanitized bucket with cleaned paths"""
     s3_client = boto3.client('s3')
+    prefixes = prefixes or ['']
 
     if dry_run:
         print("DRY RUN MODE - No files will be copied\n")
 
     # List all objects
-    print(f"Listing objects in s3://{SOURCE_BUCKET}/{prefix}...")
+    print(f"Listing objects in s3://{SOURCE_BUCKET}/...")
+    if prefixes != ['']:
+        print(f"Filtering to prefixes: {prefixes}")
     paginator = s3_client.get_paginator('list_objects_v2')
 
     all_keys = []
-    for page in paginator.paginate(Bucket=SOURCE_BUCKET, Prefix=prefix):
-        for obj in page.get('Contents', []):
-            all_keys.append(obj['Key'])
+    for prefix in prefixes:
+        for page in paginator.paginate(Bucket=SOURCE_BUCKET, Prefix=prefix):
+            for obj in page.get('Contents', []):
+                all_keys.append(obj['Key'])
 
     total = len(all_keys)
     print(f"Found {total} objects to copy\n")
@@ -121,9 +125,10 @@ def step1_copy_to_sanitized(dry_run=False, prefix=''):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Copy S3 bucket with sanitized paths')
     parser.add_argument('--dry-run', action='store_true', help='Preview changes without copying')
-    parser.add_argument('--prefix', type=str, default='', help='Only process keys with this prefix')
+    parser.add_argument('--prefix', type=str, nargs='+', default=[], help='Only process keys with these prefixes (can specify multiple)')
     parser.add_argument('--workers', type=int, default=50, help='Number of parallel workers (default: 50)')
     args = parser.parse_args()
 
     MAX_WORKERS = args.workers
-    step1_copy_to_sanitized(dry_run=args.dry_run, prefix=args.prefix)
+    prefixes = args.prefix if args.prefix else None
+    step1_copy_to_sanitized(dry_run=args.dry_run, prefixes=prefixes)
