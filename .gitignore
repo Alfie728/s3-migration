@@ -3,7 +3,7 @@ downloaded_jsons/
 backup_originals_*/
 
 # Processing logs and manifests
-*.json
+_*.json
 *.log
 
 # Python
