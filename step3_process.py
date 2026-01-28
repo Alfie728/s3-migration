@@ -1,49 +1,31 @@
 import json
 import os
-import re
 import argparse
 from datetime import datetime
 
 LOCAL_DIR = './downloaded_jsons'
 
-# PII fields to remove
-PII_FIELDS = ['email', 'name']
-DEMO_FIELDS = ['dateOfBirth', 'currentAddress', 'birthCity']
+# Fields to keep at participant level
+PARTICIPANT_KEEP_FIELDS = ['channel', 'demographics']
 
-
-def sanitize_path(path):
-    """Remove emails from paths (replace with empty string)"""
-    # Require email local part to start with a letter to avoid matching dates like 07_18_2025_20_31-
-    email_pattern = r'[a-zA-Z][a-zA-Z0-9._%+-]*@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
-    return re.sub(email_pattern, '', path)
+# Fields to keep at root level
+ROOT_KEEP_FIELDS = ['duration', 'participants', 'topic']
 
 
 def clean_info_json(data):
-    """Remove PII from info.json and update paths"""
-    for participant in data.get('participants', []):
-        # Remove top-level PII
-        for field in PII_FIELDS:
-            participant.pop(field, None)
+    """Clean info.json to only keep allowed fields"""
+    # Keep only allowed root fields
+    cleaned = {k: v for k, v in data.items() if k in ROOT_KEEP_FIELDS}
 
-        # Remove demographics PII
-        if 'demographics' in participant:
-            bg = participant['demographics'].get('backgroundInfo', {})
-            for field in DEMO_FIELDS:
-                bg.pop(field, None)
+    # Clean each participant to only keep allowed fields
+    if 'participants' in cleaned:
+        cleaned_participants = []
+        for participant in cleaned['participants']:
+            cleaned_participant = {k: v for k, v in participant.items() if k in PARTICIPANT_KEEP_FIELDS}
+            cleaned_participants.append(cleaned_participant)
+        cleaned['participants'] = cleaned_participants
 
-        # Remove participantName from QAReview
-        if 'QAReview' in participant:
-            participant['QAReview'].pop('participantName', None)
-
-        # Sanitize filePath (paths already sanitized in bucket, this ensures JSON matches)
-        if 'filePath' in participant:
-            participant['filePath'] = sanitize_path(participant['filePath'])
-
-    # Sanitize mergedFilePath
-    if 'mergedFilePath' in data:
-        data['mergedFilePath'] = sanitize_path(data['mergedFilePath'])
-
-    return data
+    return cleaned
 
 
 def is_call_passed(data):
