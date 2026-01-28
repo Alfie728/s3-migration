@@ -6,7 +6,7 @@ from datetime import datetime
 LOCAL_DIR = './downloaded_jsons'
 
 # Fields to keep at participant level
-PARTICIPANT_KEEP_FIELDS = ['channel', 'demographics']
+PARTICIPANT_KEEP_FIELDS = ['userId', 'channel', 'demographics']
 
 # Fields to keep at root level
 ROOT_KEEP_FIELDS = ['duration', 'participants', 'topic']
@@ -60,6 +60,8 @@ def clean_info_json(data):
         cleaned_participants = []
         for participant in cleaned['participants']:
             cleaned_participant = {}
+            if 'userId' in participant:
+                cleaned_participant['userId'] = participant['userId']
             if 'channel' in participant:
                 cleaned_participant['channel'] = participant['channel']
             if 'demographics' in participant:
