@@ -1,0 +1,36 @@
+# Downloaded data (contains PII before processing)
+downloaded_jsons/
+backup_originals_*/
+
+# Processing logs and manifests
+_passed_calls.json
+_failed_calls.json
+_processing.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.claude/
+
+# AWS credentials (never commit these)
+*.pem
+credentials
+.aws/
