@@ -5,7 +5,7 @@ import subprocess
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-SOURCE_BUCKET = 'web-data-platform'
+SANITIZED_BUCKET = 'web-data-platform-sanitized'
 LOCAL_DIR = './downloaded_jsons'
 MAX_WORKERS = 20  # Parallel threads
 
@@ -22,8 +22,8 @@ def move_single_folder(call, dry_run, log_file):
     old_folder = call['folder']
     new_folder = old_folder.replace('/voice-calls/', '/rejected-calls/')
 
-    old_s3_path = f"s3://{SOURCE_BUCKET}/{old_folder}/"
-    new_s3_path = f"s3://{SOURCE_BUCKET}/{new_folder}/"
+    old_s3_path = f"s3://{SANITIZED_BUCKET}/{old_folder}/"
+    new_s3_path = f"s3://{SANITIZED_BUCKET}/{new_folder}/"
 
     try:
         if dry_run:
@@ -46,7 +46,7 @@ def move_single_folder(call, dry_run, log_file):
         return False
 
 
-def step4_move_failed_calls(dry_run=False, max_workers=20):
+def step5_move_failed_calls(dry_run=False):
     """Move failed calls from voice-calls/ to rejected-calls/ using parallel processing"""
     log_file = os.path.join(LOCAL_DIR, '_processing.log')
 
@@ -57,12 +57,12 @@ def step4_move_failed_calls(dry_run=False, max_workers=20):
         print("DRY RUN MODE - No files will be moved\n")
 
     total = len(failed_calls)
-    print(f"{'[DRY RUN] ' if dry_run else ''}Moving {total} failed calls with {max_workers} parallel workers...")
+    print(f"{'[DRY RUN] ' if dry_run else ''}Moving {total} failed calls with {MAX_WORKERS} parallel workers...")
 
     moved_count = 0
     error_count = 0
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         futures = {
             executor.submit(move_single_folder, call, dry_run, log_file): call
             for call in failed_calls
@@ -93,4 +93,5 @@ if __name__ == '__main__':
     parser.add_argument('--workers', type=int, default=20, help='Number of parallel workers (default: 20)')
     args = parser.parse_args()
 
-    step4_move_failed_calls(dry_run=args.dry_run, max_workers=args.workers)
+    MAX_WORKERS = args.workers
+    step5_move_failed_calls(dry_run=args.dry_run)

@@ -1,7 +1,7 @@
-import argparse
 import json
 import os
 import re
+import argparse
 from datetime import datetime
 
 LOCAL_DIR = './downloaded_jsons'
@@ -34,7 +34,7 @@ def clean_info_json(data):
         if 'QAReview' in participant:
             participant['QAReview'].pop('participantName', None)
 
-        # Sanitize filePath
+        # Sanitize filePath (paths already sanitized in bucket, this ensures JSON matches)
         if 'filePath' in participant:
             participant['filePath'] = sanitize_path(participant['filePath'])
 
@@ -46,23 +46,12 @@ def clean_info_json(data):
 
 
 def is_call_passed(data):
-    """Check if all participants passed QA review. Returns (passed, reasons)
-
-    Old format (no QAReview field) is treated as passed.
-    New format requires QAReview.isPassed to be True.
-    """
-    reasons = []
-    for i, participant in enumerate(data.get('participants', [])):
-        qa_review = participant.get('QAReview')
-        # Old format: no QAReview field - treat as passed
-        if qa_review is None:
-            continue
-        # New format: check isPassed
+    """Check if all participants passed QA review"""
+    for participant in data.get('participants', []):
+        qa_review = participant.get('QAReview', {})
         if not qa_review.get('isPassed', False):
-            reason = qa_review.get('reason') or qa_review.get('failureReason') or qa_review.get('notes') or 'isPassed=False'
-            participant_name = participant.get('name') or participant.get('email') or f'participant[{i}]'
-            reasons.append(f"{participant_name}: {reason}")
-    return (len(reasons) == 0, reasons)
+            return False
+    return True
 
 
 def log_operation(log_file, status, folder, result):
@@ -72,7 +61,7 @@ def log_operation(log_file, status, folder, result):
         f.write(f"{timestamp} | {status:<10} | {folder} | {result}\n")
 
 
-def step2_process_jsons(dry_run=False):
+def step3_process_jsons(dry_run=False):
     """Process all downloaded JSONs: clean PII and categorize"""
     passed_calls = []
     failed_calls = []
@@ -96,7 +85,7 @@ def step2_process_jsons(dry_run=False):
                     data = json.load(f)
 
                 # Check pass/fail BEFORE cleaning (preserve original isPassed)
-                passed, fail_reasons = is_call_passed(data)
+                passed = is_call_passed(data)
 
                 # Clean PII
                 cleaned_data = clean_info_json(data)
@@ -106,27 +95,20 @@ def step2_process_jsons(dry_run=False):
                     with open(local_path, 'w') as f:
                         json.dump(cleaned_data, f, indent=2)
 
-                # Categorize
-                sanitized_folder = sanitize_path(folder)
+                # Categorize (folder paths already sanitized from Step 1)
                 call_info = {
                     's3_key': s3_key,
-                    'folder': folder,
-                    'sanitized_folder': sanitized_folder,
-                    'fail_reasons': fail_reasons
+                    'folder': folder
                 }
 
                 if passed:
                     passed_calls.append(call_info)
                     if not dry_run:
-                        log_operation(log_file, 'PROCESSED', folder, 'QA_PASSED')
+                        log_operation(log_file, 'PROCESSED', folder, 'PASSED')
                 else:
                     failed_calls.append(call_info)
-                    if dry_run:
-                        print(f"  QA REJECTED: {folder}")
-                        for reason in fail_reasons:
-                            print(f"               -> {reason}")
-                    else:
-                        log_operation(log_file, 'PROCESSED', folder, f"QA_REJECTED: {'; '.join(fail_reasons)}")
+                    if not dry_run:
+                        log_operation(log_file, 'PROCESSED', folder, 'FAILED')
 
             except Exception as e:
                 if not dry_run:
@@ -143,15 +125,8 @@ def step2_process_jsons(dry_run=False):
             json.dump(failed_calls, f, indent=2)
 
     print(f"{'[DRY RUN] ' if dry_run else ''}Processed {len(passed_calls) + len(failed_calls)} files")
-    print(f"   - QA Passed:   {len(passed_calls)}")
-    print(f"   - QA Rejected: {len(failed_calls)}")
-
-    if dry_run and failed_calls:
-        print(f"\nQA Rejected calls (will be moved to rejected-calls/):")
-        for call in failed_calls:
-            print(f"  - {call['folder']}")
-            for reason in call.get('fail_reasons', []):
-                print(f"    -> {reason}")
+    print(f"   - Passed: {len(passed_calls)}")
+    print(f"   - Failed: {len(failed_calls)}")
 
     if dry_run:
         print("\nRun without --dry-run to apply changes")
@@ -164,4 +139,4 @@ if __name__ == '__main__':
     parser.add_argument('--dry-run', action='store_true', help='Preview changes without modifying files')
     args = parser.parse_args()
 
-    step2_process_jsons(dry_run=args.dry_run)
+    step3_process_jsons(dry_run=args.dry_run)
