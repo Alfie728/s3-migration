@@ -22,10 +22,13 @@ def load_email_mapping(mapping_file):
 
 
 def sanitize_path(path):
-    """Remove emails from paths (replace with empty string)"""
+    """Remove emails from paths and collapse multiple dashes"""
     # Require email local part to start with a letter to avoid matching dates like 07_18_2025_20_31-
     email_pattern = r'[a-zA-Z][a-zA-Z0-9._%+-]*@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
-    return re.sub(email_pattern, '', path)
+    result = re.sub(email_pattern, '', path)
+    # Collapse multiple consecutive dashes into a single dash
+    result = re.sub(r'-{2,}', '-', result)
+    return result
 
 
 def sanitize_separate_file(path):

@@ -1,14 +1,17 @@
-import re
 import argparse
+import re
 import subprocess
 
 SANITIZED_BUCKET = 'web-data-platform-sanitized'
 
 
 def sanitize_path(path):
-    """Remove emails from paths (same logic as step1)"""
+    """Remove emails from paths and collapse multiple dashes (same logic as step1)"""
     email_pattern = r'[a-zA-Z][a-zA-Z0-9._%+-]*@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
-    return re.sub(email_pattern, '', path)
+    result = re.sub(email_pattern, '', path)
+    # Collapse multiple consecutive dashes into a single dash
+    result = re.sub(r'-{2,}', '-', result)
+    return result
 
 
 def parse_missing_files_log(log_file):
