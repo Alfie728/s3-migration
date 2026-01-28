@@ -127,8 +127,8 @@ All commands below use these prefixes.
 pip install boto3
 ```
 
-# Configure AWS CLI for max performance
 ```bash
+# Configure AWS CLI for max performance
 aws configure set default.s3.max_concurrent_requests 100
 aws configure set default.s3.max_queue_size 10000
 aws configure set default.s3.multipart_threshold 64MB
