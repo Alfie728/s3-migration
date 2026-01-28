@@ -46,12 +46,19 @@ def clean_info_json(data):
 
 
 def is_call_passed(data):
-    """Check if all participants passed QA review. Returns (passed, reasons)"""
+    """Check if all participants passed QA review. Returns (passed, reasons)
+
+    Old format (no QAReview field) is treated as passed.
+    New format requires QAReview.isPassed to be True.
+    """
     reasons = []
     for i, participant in enumerate(data.get('participants', [])):
-        qa_review = participant.get('QAReview', {})
+        qa_review = participant.get('QAReview')
+        # Old format: no QAReview field - treat as passed
+        if qa_review is None:
+            continue
+        # New format: check isPassed
         if not qa_review.get('isPassed', False):
-            # Try to get failure reason from QAReview
             reason = qa_review.get('reason') or qa_review.get('failureReason') or qa_review.get('notes') or 'isPassed=False'
             participant_name = participant.get('name') or participant.get('email') or f'participant[{i}]'
             reasons.append(f"{participant_name}: {reason}")
