@@ -1,6 +1,6 @@
+import argparse
 import json
 import os
-import argparse
 from datetime import datetime
 
 LOCAL_DIR = './downloaded_jsons'
@@ -11,19 +11,65 @@ PARTICIPANT_KEEP_FIELDS = ['channel', 'demographics']
 # Fields to keep at root level
 ROOT_KEEP_FIELDS = ['duration', 'participants', 'topic']
 
+# Fields to keep in backgroundInfo (remove PII like currentAddress)
+BACKGROUND_INFO_KEEP_FIELDS = ['birthCity', 'gender', 'race', 'dateOfBirth', 'spokenLanguages', 'currentOccupation']
+
+# Fields to keep in topic
+TOPIC_KEEP_FIELDS = ['mainQuestion', 'category']
+
+
+def clean_background_info(background_info):
+    """Clean backgroundInfo to only keep allowed fields"""
+    if not background_info:
+        return {}
+    return {k: v for k, v in background_info.items() if k in BACKGROUND_INFO_KEEP_FIELDS}
+
+
+def clean_demographics(demographics):
+    """Clean demographics object"""
+    if not demographics:
+        return {}
+
+    cleaned = {}
+
+    # Clean backgroundInfo
+    if 'backgroundInfo' in demographics:
+        cleaned['backgroundInfo'] = clean_background_info(demographics['backgroundInfo'])
+
+    # Keep linguisticQuestionnaire as-is (no PII there)
+    # But based on target format, we should NOT include linguisticQuestionnaire
+    # Target only has backgroundInfo inside demographics
+
+    return cleaned
+
+
+def clean_topic(topic):
+    """Clean topic to only keep allowed fields"""
+    if not topic:
+        return {}
+    return {k: v for k, v in topic.items() if k in TOPIC_KEEP_FIELDS}
+
 
 def clean_info_json(data):
     """Clean info.json to only keep allowed fields"""
     # Keep only allowed root fields
     cleaned = {k: v for k, v in data.items() if k in ROOT_KEEP_FIELDS}
 
-    # Clean each participant to only keep allowed fields
+    # Clean each participant to only keep allowed fields and clean nested objects
     if 'participants' in cleaned:
         cleaned_participants = []
         for participant in cleaned['participants']:
-            cleaned_participant = {k: v for k, v in participant.items() if k in PARTICIPANT_KEEP_FIELDS}
+            cleaned_participant = {}
+            if 'channel' in participant:
+                cleaned_participant['channel'] = participant['channel']
+            if 'demographics' in participant:
+                cleaned_participant['demographics'] = clean_demographics(participant['demographics'])
             cleaned_participants.append(cleaned_participant)
         cleaned['participants'] = cleaned_participants
+
+    # Clean topic
+    if 'topic' in cleaned:
+        cleaned['topic'] = clean_topic(cleaned['topic'])
 
     return cleaned
 
