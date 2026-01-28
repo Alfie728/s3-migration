@@ -14,7 +14,8 @@ Process voice call recordings to:
 
 | Script | Purpose |
 |--------|---------|
-| `step1_copy_sanitized.py` | Copy files to sanitized bucket with emails removed from paths |
+| `step1_copy_sanitized.py` | Copy files to sanitized bucket with emails removed from paths and audio files renamed |
+| `step2_download_original.py` | Download info.json from original bucket with sanitized paths |
 | `step3_process.py` | Clean PII from info.json and categorize pass/fail |
 | `step5_move_failed.py` | Move failed calls to rejected-calls folder |
 | `step6_sync_customer.py` | Sync to customer bucket (excludes rejected-calls) |
@@ -33,8 +34,10 @@ web-data-platform/[projectId]/recordings/voice-calls/
     ├── info.json
     ├── merged_xxx.wav
     └── separate/
-        ├── [email1]-[sessionId]_audio_xxx.ogg
-        └── [email2]-[sessionId]_audio_xxx.ogg
+        ├── [email1]-[sessionId]_audio_[uuid].ogg
+        ├── [email2]-[sessionId]_audio_[uuid].ogg
+        ├── [userId1]-[sessionId]-transcription.json
+        └── [userId2]-[sessionId]-transcription.json
 ```
 
 **After (sanitized):**
@@ -45,10 +48,29 @@ web-data-platform-sanitized/[projectId]/recordings/
 │       ├── info.json     # PII removed
 │       ├── merged_xxx.wav
 │       └── separate/
-│           └── -[sessionId]_audio_xxx.ogg
+│           ├── [userId1]-[sessionId]-audio.ogg
+│           ├── [userId2]-[sessionId]-audio.ogg
+│           ├── [userId1]-[sessionId]-transcription.json
+│           └── [userId2]-[sessionId]-transcription.json
 └── rejected-calls/       # Failed calls
     └── ...
 ```
+
+---
+
+## Email to UserId Mapping
+
+Step 1 requires a JSON file mapping emails to userIds for renaming audio files.
+
+**File: `email_to_userid.json`**
+```json
+{
+  "user1@example.com": "userId123abc",
+  "user2@example.com": "userId456def"
+}
+```
+
+Your colleague needs to provide this mapping for all users in the projects being processed.
 
 ---
 
@@ -65,6 +87,7 @@ Only these fields are kept:
       "demographics": {
         "backgroundInfo": {
           "gender": "Male",
+          "race": "Asian",
           "dateOfBirth": "2000-05-18T00:00:00.000Z",
           "birthCity": { "city": "Pathankot, IN-PB", "yearsLived": 25 },
           "spokenLanguages": [...],
@@ -82,6 +105,21 @@ Only these fields are kept:
 
 ---
 
+## Target Projects
+
+These are the 3 projects being processed:
+
+| Project ID | Description |
+|------------|-------------|
+| `692801d5ce882a630401bee8/` | Project 1 |
+| `692801d6ce882a630401beee/` | Project 2 |
+| `6968e7dd2371cd2887b5799f/` | Project 3 |
+... more projectIds once there're done being processed ...
+
+All commands below use these prefixes.
+
+---
+
 ## Quick Start
 
 ```bash
@@ -93,30 +131,45 @@ pip install boto3
 
 ## Step 1: Copy to Sanitized Bucket
 
-Copies files with emails removed from paths.
+Copies files with emails removed from paths. Audio files in `separate/` are renamed from `[email]-[sessionId]_audio_[uuid].ogg` to `[userId]-[sessionId]-audio.ogg`.
+
+**Prerequisites:** `email_to_userid.json` file with email to userId mapping.
 
 ```bash
 # Dry run
-python3 step1_copy_sanitized.py --dry-run
+python3 step1_copy_sanitized.py --email-mapping email_to_userid.json --dry-run
 
 # Specific projects only
-python3 step1_copy_sanitized.py --prefix 692801d5ce882a630401bee8/ 692801d6ce882a630401beee/ --dry-run
+python3 step1_copy_sanitized.py --email-mapping email_to_userid.json \
+  --prefix 692801d5ce882a630401bee8/ 692801d6ce882a630401beee/ 6968e7dd2371cd2887b5799f/ \
+  --dry-run
 
 # Run for real
-python3 step1_copy_sanitized.py --workers 50
+python3 step1_copy_sanitized.py --email-mapping email_to_userid.json \
+  --prefix 692801d5ce882a630401bee8/ 692801d6ce882a630401beee/ 6968e7dd2371cd2887b5799f/ \
+  --workers 50
 ```
 
 **Verify:** See [Data Integrity Verification](#utility-scripts-data-integrity-verification) below.
 
 ---
 
-## Step 2: Download info.json Files
+## Step 2: Download info.json from Original Bucket
+
+Downloads `info.json` from the **original** bucket with sanitized local paths. This ensures we have the complete original data before cleaning PII.
 
 ```bash
-aws s3 cp s3://web-data-platform-sanitized/ ./downloaded_jsons/ \
-  --recursive \
-  --exclude "*" \
-  --include "*/voice-calls/*/info.json"
+# Dry run (preview what will be downloaded)
+python3 step2_download_original.py --dry-run
+
+# Specific projects only
+python3 step2_download_original.py \
+  --prefix 692801d5ce882a630401bee8/ 692801d6ce882a630401beee/ 6968e7dd2371cd2887b5799f/ \
+  --dry-run
+
+# Run for real
+python3 step2_download_original.py \
+  --prefix 692801d5ce882a630401bee8/ 692801d6ce882a630401beee/ 6968e7dd2371cd2887b5799f/
 ```
 
 ---
@@ -145,8 +198,7 @@ aws s3 cp ./downloaded_jsons/ s3://web-data-platform-sanitized/ \
   --recursive \
   --exclude "*" \
   --include "*/info.json" \
-  --exclude "_*.json" \
-  --exclude "*.log"
+  --exclude "_*"
 ```
 
 ---
@@ -175,7 +227,8 @@ python3 step6_sync_customer.py --bucket customer-bucket-name --dry-run
 
 # Specific projects
 python3 step6_sync_customer.py --bucket customer-bucket-name \
-  --prefix 692801d5ce882a630401bee8/ 692801d6ce882a630401beee/ --dry-run
+  --prefix 692801d5ce882a630401bee8/ 692801d6ce882a630401beee/ 6968e7dd2371cd2887b5799f/ \
+  --dry-run
 
 # Run for real
 python3 step6_sync_customer.py --bucket customer-bucket-name
@@ -186,9 +239,9 @@ python3 step6_sync_customer.py --bucket customer-bucket-name
 ## Execution Flow
 
 ```
-Step 1: Copy to sanitized bucket (emails removed from paths)
+Step 1: Copy to sanitized bucket (emails removed, audio files renamed)
     ↓
-Step 2: Download info.json files
+Step 2: Download info.json from original bucket
     ↓
 Step 3: Process JSONs (clean PII, categorize pass/fail)
     ↓
