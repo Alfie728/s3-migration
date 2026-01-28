@@ -11,7 +11,8 @@ MAX_WORKERS = 50  # Parallel threads
 
 def sanitize_path(path):
     """Remove emails from paths (replace with empty string)"""
-    email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+    # Require email local part to start with a letter to avoid matching dates like 07_18_2025_20_31-
+    email_pattern = r'[a-zA-Z][a-zA-Z0-9._%+-]*@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
     return re.sub(email_pattern, '', path)
 
 
@@ -58,18 +59,27 @@ def step1_copy_to_sanitized(dry_run=False, prefix=''):
     print(f"Found {total} objects to copy\n")
 
     if dry_run:
-        print("Sample of paths that will be renamed:\n")
-        renamed_count = 0
-        for key in all_keys[:100]:  # Show first 100
-            if key != sanitize_path(key):
-                print(f"  {key}\n  -> {sanitize_path(key)}\n")
-                renamed_count += 1
-                if renamed_count >= 20:
-                    print(f"  ... and more\n")
-                    break
+        # Group keys by project (first path segment) and show 5 samples each
+        projects = {}
+        for key in all_keys:
+            project = key.split('/')[0]
+            if project not in projects:
+                projects[project] = []
+            if len(projects[project]) < 5 and key != sanitize_path(key):
+                projects[project].append(key)
+
+        print(f"Sample of paths that will be renamed (5 per project):\n")
+        for project in sorted(projects.keys()):
+            samples = projects[project]
+            if samples:
+                print(f"=== Project: {project} ===")
+                for key in samples:
+                    print(f"  {key}")
+                    print(f"  -> {sanitize_path(key)}\n")
 
         total_renamed = sum(1 for k in all_keys if k != sanitize_path(k))
         print(f"\nSummary:")
+        print(f"   Total projects: {len(projects)}")
         print(f"   Total objects: {total}")
         print(f"   Will be renamed: {total_renamed}")
         print(f"   Unchanged: {total - total_renamed}")
